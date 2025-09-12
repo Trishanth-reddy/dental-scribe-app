@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, ChangeEvent, FormEvent } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,41 +8,43 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Upload, ImagePlus, X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { uploadSubmission } from '@/lib/apiService';
 
 export const ImageUpload = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  const [formData, setFormData] = useState({
-    patientName: user?.name || '',
-    patientId: user?.patientId || '',
-    email: user?.email || '',
-    notes: ''
-  });
-  
+  const queryClient = useQueryClient();
+
+  const [notes, setNotes] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const mutation = useMutation({
+    mutationFn: uploadSubmission,
+    onSuccess: () => {
+      toast.success('Image uploaded successfully! Our team will review it shortly.');
+      queryClient.invalidateQueries({ queryKey: ['patientSubmissions'] });
+      navigate('/patient/dashboard');
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || 'Upload failed. Please try again.');
+    },
+  });
+
+  const handleFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      // Validate file type
       if (!file.type.startsWith('image/')) {
-        toast.error('Please select a valid image file');
+        toast.error('Please select a valid image file (JPG, PNG, WebP).');
         return;
       }
-      
-      // Validate file size (max 10MB)
-      if (file.size > 10 * 1024 * 1024) {
-        toast.error('File size must be less than 10MB');
+      if (file.size > 10 * 1024 * 1024) { // 10MB
+        toast.error('File size must be less than 10MB.');
         return;
       }
-
       setSelectedFile(file);
-      
-      // Create preview URL
       const url = URL.createObjectURL(file);
       setPreviewUrl(url);
     }
@@ -59,39 +61,18 @@ export const ImageUpload = () => {
     }
   };
 
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    
     if (!selectedFile) {
-      toast.error('Please select an image file');
+      toast.error('Please select an image file to upload.');
       return;
     }
 
-    if (!formData.patientName || !formData.email) {
-      toast.error('Please fill in all required fields');
-      return;
-    }
+    const formData = new FormData();
+    formData.append('image', selectedFile);
+    formData.append('notes', notes);
 
-    setUploading(true);
-    
-    try {
-      // Simulate upload process
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // In a real app, this would upload to server
-      toast.success('Image uploaded successfully! Our team will review it shortly.');
-      
-      // Navigate back to dashboard
-      navigate('/patient/dashboard');
-    } catch (error) {
-      toast.error('Upload failed. Please try again.');
-    } finally {
-      setUploading(false);
-    }
+    mutation.mutate(formData);
   };
 
   return (
@@ -100,7 +81,6 @@ export const ImageUpload = () => {
         <h1 className="text-3xl font-bold text-primary">Upload Dental Image</h1>
         <p className="text-muted-foreground">Share your dental images for professional review</p>
       </div>
-
       <Card className="shadow-medical">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -108,142 +88,59 @@ export const ImageUpload = () => {
             New Image Submission
           </CardTitle>
         </CardHeader>
-        
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Patient Information */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="patientName">Patient Name *</Label>
-                <Input
-                  id="patientName"
-                  value={formData.patientName}
-                  onChange={(e) => handleInputChange('patientName', e.target.value)}
-                  placeholder="Enter patient name"
-                  required
-                />
+                <Label htmlFor="patientName">Patient Name</Label>
+                <Input id="patientName" value={user?.name || ''} readOnly disabled />
               </div>
-              
               <div className="space-y-2">
                 <Label htmlFor="patientId">Patient ID</Label>
-                <Input
-                  id="patientId"
-                  value={formData.patientId}
-                  onChange={(e) => handleInputChange('patientId', e.target.value)}
-                  placeholder="Auto-generated ID"
-                  readOnly
-                />
-              </div>
-              
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="email">Email Address *</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => handleInputChange('email', e.target.value)}
-                  placeholder="Enter email address"
-                  required
-                />
+                <Input id="patientId" value={user?.patientId || ''} readOnly disabled />
               </div>
             </div>
 
-            {/* File Upload */}
-            <div className="space-y-4">
-              <Label>Dental Image *</Label>
-              
+            <div className="space-y-2">
+              <Label htmlFor="dental-image-upload">Dental Image *</Label>
               {!selectedFile ? (
-                <div
-                  onClick={() => fileInputRef.current?.click()}
+                <div 
+                  id="dental-image-upload"
+                  onClick={() => fileInputRef.current?.click()} 
                   className="border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:border-primary transition-colors"
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => e.key === 'Enter' && fileInputRef.current?.click()}
                 >
                   <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-foreground mb-2">
-                    Click to upload dental image
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Supports: JPG, PNG, WebP (Max 10MB)
-                  </p>
+                  <h3 className="text-lg font-medium text-foreground mb-2">Click to upload image</h3>
+                  <p className="text-sm text-muted-foreground">Supports: JPG, PNG, WebP (Max 10MB)</p>
                 </div>
               ) : (
                 <div className="border border-border rounded-lg p-4">
                   <div className="flex items-start gap-4">
-                    <div className="flex-1">
-                      <img
-                        src={previewUrl || ''}
-                        alt="Preview"
-                        className="max-w-full h-48 object-cover rounded-lg border border-border"
-                      />
-                    </div>
-                    <div className="flex-1 space-y-2">
+                    <img src={previewUrl || ''} alt="Preview" className="w-48 h-48 object-cover rounded-lg border border-border" />
+                    <div className="space-y-2 flex-1">
                       <h4 className="font-medium text-foreground">Selected File:</h4>
-                      <p className="text-sm text-muted-foreground">{selectedFile.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Size: {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-                      </p>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={handleRemoveFile}
-                        className="flex items-center gap-2"
-                      >
-                        <X className="w-4 h-4" />
-                        Remove
-                      </Button>
+                      <p className="text-sm text-muted-foreground break-all">{selectedFile.name}</p>
+                      <p className="text-sm text-muted-foreground">Size: {(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                      <Button type="button" variant="outline" size="sm" onClick={handleRemoveFile} className="flex items-center gap-2"><X className="w-4 h-4" />Remove</Button>
                     </div>
                   </div>
                 </div>
               )}
-              
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleFileSelect}
-                className="hidden"
-              />
+              <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
             </div>
 
-            {/* Notes */}
             <div className="space-y-2">
-              <Label htmlFor="notes">Additional Notes</Label>
-              <Textarea
-                id="notes"
-                value={formData.notes}
-                onChange={(e) => handleInputChange('notes', e.target.value)}
-                placeholder="Any specific concerns or information about this image..."
-                rows={3}
-              />
+              <Label htmlFor="notes">Additional Notes (Optional)</Label>
+              <Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any specific concerns or areas to look at..." rows={3} />
             </div>
 
-            {/* Submit Button */}
-            <div className="flex gap-4 pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => navigate('/patient/dashboard')}
-                disabled={uploading}
-              >
-                Cancel
-              </Button>
-              
-              <Button
-                type="submit"
-                className="bg-gradient-medical hover:opacity-90 flex items-center gap-2"
-                disabled={!selectedFile || uploading}
-              >
-                {uploading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Uploading...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="w-4 h-4" />
-                    Submit for Review
-                  </>
-                )}
+            <div className="flex justify-end gap-4 pt-4">
+              <Button type="button" variant="outline" onClick={() => navigate('/patient/dashboard')} disabled={mutation.isPending}>Cancel</Button>
+              <Button type="submit" className="bg-gradient-medical hover:opacity-90 flex items-center gap-2" disabled={!selectedFile || mutation.isPending}>
+                {mutation.isPending ? (<><Loader2 className="w-4 h-4 animate-spin" />Uploading...</>) : (<><Upload className="w-4 h-4" />Submit for Review</>)}
               </Button>
             </div>
           </form>

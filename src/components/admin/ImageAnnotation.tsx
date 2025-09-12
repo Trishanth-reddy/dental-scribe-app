@@ -1,203 +1,213 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Canvas as FabricCanvas, Circle, Rect, Line, FabricImage, Polygon, Group } from 'fabric';
-import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { 
-  Square, 
-  Circle as CircleIcon, 
-  ArrowRight, 
-  PenTool, 
-  Save,
-  Download,
-  Undo,
-  Redo,
-  MousePointer,
-  Trash2
-} from 'lucide-react';
-import { toast } from 'sonner';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { Canvas, Image as FabricImage } from "fabric";
+import { toast } from "sonner";
+import { fetchSubmissionById, saveReview } from "@/lib/apiService";
+import { pdf } from '@react-pdf/renderer';
+import { DentalReportPDF } from './DentalReportPDF';
+import { AnnotationToolbar } from './AnnotationToolbar';
 
-// Mock patient data
-const mockPatientData = {
-  id: '1',
-  patientName: 'Sarah Johnson',
-  patientId: 'P0001',
-  email: 'sarah@example.com',
-  fileName: 'teeth_scan_2024_01.jpg',
-  uploadDate: '2024-01-15T10:30:00Z',
-  notes: 'Routine checkup scan',
-  status: 'pending'
+// A simple Loader component
+const SimpleLoader = () => (
+  <div style={{ border: "4px solid #f3f3f3", borderTop: "4px solid #3498db", borderRadius: "50%", width: "40px", height: "40px", animation: "spin 1s linear infinite" }}>
+    <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+  </div>
+);
+
+// ==================================================================
+// === FIX: Add and export the parseFindings function ===
+// ==================================================================
+export const parseFindings = (notes) => {
+    const findings = { general: [], recommendations: [] };
+    if (!notes) return findings;
+
+    const conditionsMap = {
+      inflamed: { condition: 'Inflamed or Red gums', treatment: 'Scaling and professional cleaning.', color: '#5a005a' },
+      malaligned: { condition: 'Malaligned Teeth', treatment: 'Braces or Clear Aligner evaluation.', color: '#ffff00' },
+      receded: { condition: 'Receded gums', treatment: 'Consultation for potential Gum Surgery.', color: '#d3d3d3' },
+      stains: { condition: 'Stains', treatment: 'Professional teeth cleaning and polishing.', color: '#ff0000' },
+      attrition: { condition: 'Attrition (Wear)', treatment: 'Filling or Night Guard recommended.', color: '#00ffff' },
+      crown: { condition: 'Crowns / Caps', treatment: 'If loose or broken, get it checked. Tooth-colored caps are best.', color: '#ff00ff' },
+      cavity: { condition: 'Cavity / Decay', treatment: 'Restorative treatment (fillings) required.', color: '#8B4513' }
+    };
+
+    const detectedConditions = new Set();
+    const lines = notes.split('\n').map(line => line.trim()).filter(line => line);
+    
+    lines.forEach(line => {
+      const lowerLine = line.toLowerCase();
+      let conditionFound = false;
+      for (const keyword in conditionsMap) {
+        if (lowerLine.includes(keyword)) {
+          if (!detectedConditions.has(keyword)) {
+            findings.recommendations.push(conditionsMap[keyword]);
+            detectedConditions.add(keyword);
+          }
+          conditionFound = true;
+        }
+      }
+      if (!conditionFound) {
+        findings.general.push(line);
+      }
+    });
+    
+    return findings;
 };
 
-export const ImageAnnotation = () => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [fabricCanvas, setFabricCanvas] = useState<FabricCanvas | null>(null);
-  const [activeTool, setActiveTool] = useState<'select' | 'rectangle' | 'circle' | 'arrow' | 'freehand'>('select');
-  const [adminNotes, setAdminNotes] = useState('');
-  const [saving, setSaving] = useState(false);
-  const navigate = useNavigate();
-  const { submissionId } = useParams();
+const blobToDataURL = (blob) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = (error) => reject(error);
+    reader.readAsDataURL(blob);
+  });
+};
 
-  // Mock image URL
-  const imageUrl = 'https://images.unsplash.com/photo-1606811841689-23dfddce3e95?w=800&h=600&fit=crop';
+export const ImageAnnotation: React.FC = () => {
+  const { submissionId } = useParams<{ submissionId: string }>();
+  const navigate = useNavigate();
+
+  const [submission, setSubmission] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const [canvas, setCanvas] = useState<Canvas | null>(null);
+  const [adminNotes, setAdminNotes] = useState("");
+  const reviewed = submission?.status === "reviewed";
 
   useEffect(() => {
-    if (!canvasRef.current) return;
+    if (!submissionId) return;
+    setIsLoading(true);
+    fetchSubmissionById(submissionId)
+      .then((data) => {
+        setSubmission(data);
+        setAdminNotes(data.adminNotes || "");
+      })
+      .catch(() => toast.error("Failed to load submission data."))
+      .finally(() => setIsLoading(false));
+  }, [submissionId]);
 
-    const canvas = new FabricCanvas(canvasRef.current, {
-      width: 800,
-      height: 600,
-      backgroundColor: '#ffffff',
-    });
+  useEffect(() => {
+    if (!canvasRef.current || !submission) return;
 
-    // Load dental image
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const fabricImage = new FabricImage(img, {
-        left: 0,
-        top: 0,
-        selectable: false,
-        evented: false,
+    const initializeCanvas = async () => {
+      const container = canvasContainerRef.current!;
+      const fabricCanvas = new Canvas(canvasRef.current, {
+        width: container.offsetWidth,
+        height: container.offsetHeight,
+        backgroundColor: "#f9fafb",
       });
-      
-      const scale = Math.min(800 / img.width, 600 / img.height);
-      fabricImage.scale(scale);
-      
-      canvas.add(fabricImage);
-      canvas.renderAll();
+
+      const scaleAndCenterImage = (img: FabricImage) => {
+        const scale = Math.min(fabricCanvas.getWidth() / (img.width || 1), fabricCanvas.getHeight() / (img.height || 1));
+        img.scale(scale);
+        img.set({
+          left: (fabricCanvas.getWidth() - img.getScaledWidth()) / 2,
+          top: (fabricCanvas.getHeight() - img.getScaledHeight()) / 2,
+          selectable: false, evented: false, name: "background-image",
+        });
+        fabricCanvas.add(img);
+        fabricCanvas.sendObjectToBack(img);
+        fabricCanvas.renderAll();
+      };
+
+      const imageUrl = reviewed ? submission.annotatedImageUrl : submission.originalImageUrl;
+      if (imageUrl) {
+        try {
+          const img = await FabricImage.fromURL(imageUrl, { crossOrigin: 'anonymous' });
+          scaleAndCenterImage(img);
+        } catch (e) { toast.error("Could not load image onto canvas."); }
+      }
+      setCanvas(fabricCanvas);
     };
-    img.src = imageUrl;
-
-    // Configure drawing
-    canvas.freeDrawingBrush.color = '#ef4444';
-    canvas.freeDrawingBrush.width = 3;
-
-    setFabricCanvas(canvas);
-
-    return () => {
-      canvas.dispose();
-    };
-  }, []);
-
-  const handleToolClick = (tool: typeof activeTool) => {
-    setActiveTool(tool);
-    if (!fabricCanvas) return;
-
-    fabricCanvas.isDrawingMode = tool === 'freehand';
-
-    if (tool === 'rectangle') {
-      const rect = new Rect({
-        left: 100,
-        top: 100,
-        fill: 'transparent',
-        stroke: '#ef4444',
-        strokeWidth: 3,
-        width: 100,
-        height: 80,
-      });
-      fabricCanvas.add(rect);
-    } else if (tool === 'circle') {
-      const circle = new Circle({
-        left: 150,
-        top: 150,
-        fill: 'transparent',
-        stroke: '#ef4444',
-        strokeWidth: 3,
-        radius: 50,
-      });
-      fabricCanvas.add(circle);
-    } else if (tool === 'arrow') {
-      const line = new Line([200, 200, 300, 250], {
-        stroke: '#ef4444',
-        strokeWidth: 3,
-      });
-      fabricCanvas.add(line);
-    }
-  };
-
+    
+    initializeCanvas();
+    return () => { canvas?.dispose(); };
+  }, [submission, reviewed]);
+  
   const handleSave = async () => {
-    setSaving(true);
+    if (!submission || !canvas) return;
+    setIsSaving(true);
+    canvas.discardActiveObject();
+    canvas.renderAll();
+
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      toast.success('Review saved successfully!');
-      navigate('/admin/submissions');
-    } catch (error) {
-      toast.error('Failed to save');
+      const annotatedImageDataUrl = canvas.toDataURL({ format: "png", quality: 1.0 });
+      
+      const doc = <DentalReportPDF 
+        submission={submission} 
+        originalImageUrl={submission.originalImageUrl}
+        annotatedImageDataUrl={annotatedImageDataUrl} 
+        adminNotes={adminNotes} 
+      />;
+
+      const pdfBlob = await pdf(doc).toBlob();
+      const pdfDataUrl = await blobToDataURL(pdfBlob) as string;
+
+      await saveReview({
+        id: submissionId!,
+        data: { adminNotes, annotatedImageDataUrl, pdfDataUrl },
+      });
+
+      toast.success("Review saved successfully!");
+      navigate("/admin/dashboard");
+    } catch (err) {
+      toast.error("Save failed. Please try again.");
     } finally {
-      setSaving(false);
+      setIsSaving(false);
     }
   };
+
+  if (isLoading) { return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><SimpleLoader /></div>; }
+  if (!submission) { return <div style={{ textAlign: 'center', marginTop: '2rem' }}>Submission not found.</div>; }
 
   return (
-    <div className="max-w-7xl mx-auto p-4 space-y-6">
-      <Card className="shadow-medical">
-        <CardHeader>
-          <CardTitle>Image Review - {mockPatientData.patientName}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2">
-              <div className="flex gap-2 mb-4">
-                <Button
-                  variant={activeTool === 'select' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => handleToolClick('select')}
-                >
-                  <MousePointer className="w-4 h-4 mr-2" />
-                  Select
-                </Button>
-                <Button
-                  variant={activeTool === 'rectangle' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => handleToolClick('rectangle')}
-                >
-                  <Square className="w-4 h-4 mr-2" />
-                  Rectangle
-                </Button>
-                <Button
-                  variant={activeTool === 'circle' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => handleToolClick('circle')}
-                >
-                  <CircleIcon className="w-4 h-4 mr-2" />
-                  Circle
-                </Button>
-                <Button
-                  variant={activeTool === 'freehand' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => handleToolClick('freehand')}
-                >
-                  <PenTool className="w-4 h-4 mr-2" />
-                  Draw
-                </Button>
-              </div>
-              <canvas ref={canvasRef} className="border rounded-lg" />
-            </div>
-            
-            <div>
-              <Label>Professional Notes</Label>
-              <Textarea
-                value={adminNotes}
-                onChange={(e) => setAdminNotes(e.target.value)}
-                placeholder="Enter your assessment..."
-                rows={10}
-                className="mb-4"
-              />
-              <Button
-                onClick={handleSave}
-                disabled={saving}
-                className="w-full bg-medical-green"
-              >
-                {saving ? 'Saving...' : 'Save Review'}
-              </Button>
+    <div style={{ maxWidth: '1200px', margin: 'auto', padding: '1rem' }}>
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}>
+        <div style={{ padding: '1.5rem' }}>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Review Submission</h1>
+          <p style={{ color: '#6b7280' }}>
+            Patient: <span style={{ fontWeight: 600 }}>{submission.patient.name}</span> | Status: 
+            <span style={{ fontWeight: 600, color: reviewed ? 'green' : 'orange', marginLeft: '4px' }}>
+              {submission.status.toUpperCase()}
+            </span>
+          </p>
+        </div>
+        <div style={{ padding: '1.5rem', display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem' }}>
+          <div>
+            <AnnotationToolbar canvas={canvas} isReviewed={reviewed} />
+            <div ref={canvasContainerRef} style={{ border: '2px solid #d1d5db', borderRadius: '8px', height: '600px', position: 'relative' }}>
+              <canvas ref={canvasRef} />
             </div>
           </div>
-        </CardContent>
-      </Card>
+          <div>
+            <label htmlFor="admin-notes" style={{ fontWeight: 600 }}>Professional Notes</label>
+            <textarea
+              id="admin-notes"
+              value={adminNotes}
+              onChange={(e) => setAdminNotes(e.target.value)}
+              readOnly={reviewed}
+              rows={12}
+              style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', marginTop: '8px' }}
+              placeholder="Enter clinical findings... These notes will generate the report."
+            />
+            <div style={{ marginTop: '1rem' }}>
+              {!reviewed ? (
+                <button onClick={handleSave} disabled={isSaving} style={{ width: '100%', padding: '12px', background: '#22c55e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                  {isSaving ? 'Saving...' : 'Save Review & Generate Report'}
+                </button>
+              ) : (
+                <a href={submission.pdfReportUrl} target="_blank" rel="noopener noreferrer">
+                  <button style={{ width: '100%', padding: '12px', background: '#3b72f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                    Download Report
+                  </button>
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

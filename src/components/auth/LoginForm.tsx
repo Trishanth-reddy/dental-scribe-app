@@ -15,8 +15,10 @@ export const LoginForm = () => {
     email: '',
     password: '',
   });
+  // State to keep track of the active tab for the toast message
+  const [activeTab, setActiveTab] = useState<UserRole>('patient');
 
-  const handleSubmit = async (role: UserRole) => {
+  const handleSubmit = async () => {
     if (!formData.email || !formData.password) {
       toast.error('Please fill in all fields');
       return;
@@ -24,12 +26,12 @@ export const LoginForm = () => {
 
     setLoading(true);
     try {
-      const success = await login(formData.email, formData.password, role);
+      // FIX: The `login` function doesn't need the `role` argument.
+      const success = await login(formData.email, formData.password);
       if (success) {
-        toast.success(`Welcome! Logged in as ${role}`);
-      } else {
-        toast.error('Invalid credentials. Try admin@dental.com / admin123 for admin access.');
+        toast.success(`Welcome! Logged in as ${activeTab}`);
       }
+      // Note: The specific error toast for invalid credentials is handled in the AuthContext now.
     } catch (error) {
       toast.error('Login failed. Please try again.');
     } finally {
@@ -53,7 +55,7 @@ export const LoginForm = () => {
         </CardHeader>
         
         <CardContent>
-          <Tabs defaultValue="patient" className="w-full">
+          <Tabs defaultValue="patient" onValueChange={(value) => setActiveTab(value as UserRole)} className="w-full">
             <TabsList className="grid w-full grid-cols-2 mb-6">
               <TabsTrigger value="patient" className="flex items-center gap-2">
                 <UserCircle className="w-4 h-4" />
@@ -66,7 +68,7 @@ export const LoginForm = () => {
             </TabsList>
             
             <TabsContent value="patient">
-              <div className="space-y-4">
+              <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="patient-email">Email Address</Label>
                   <Input
@@ -76,6 +78,7 @@ export const LoginForm = () => {
                     value={formData.email}
                     onChange={(e) => handleInputChange('email', e.target.value)}
                     disabled={loading}
+                    autoComplete="email"
                   />
                 </div>
                 <div className="space-y-2">
@@ -87,24 +90,22 @@ export const LoginForm = () => {
                     value={formData.password}
                     onChange={(e) => handleInputChange('password', e.target.value)}
                     disabled={loading}
+                    autoComplete="current-password"
                   />
                 </div>
                 <Button 
-                  onClick={() => handleSubmit('patient')} 
+                  type="submit"
                   className="w-full bg-gradient-medical hover:opacity-90"
                   disabled={loading}
                 >
                   {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                   Sign In as Patient
                 </Button>
-                <p className="text-sm text-center text-muted-foreground">
-                  Use any valid email and password (6+ chars) for patient demo
-                </p>
-              </div>
+              </form>
             </TabsContent>
             
             <TabsContent value="admin">
-              <div className="space-y-4">
+              <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="admin-email">Admin Email</Label>
                   <Input
@@ -114,6 +115,7 @@ export const LoginForm = () => {
                     value={formData.email}
                     onChange={(e) => handleInputChange('email', e.target.value)}
                     disabled={loading}
+                    autoComplete="email"
                   />
                 </div>
                 <div className="space-y-2">
@@ -125,10 +127,11 @@ export const LoginForm = () => {
                     value={formData.password}
                     onChange={(e) => handleInputChange('password', e.target.value)}
                     disabled={loading}
+                    autoComplete="current-password"
                   />
                 </div>
                 <Button 
-                  onClick={() => handleSubmit('admin')} 
+                  type="submit"
                   className="w-full bg-medical-blue hover:bg-medical-blue/90"
                   disabled={loading}
                 >
@@ -138,7 +141,7 @@ export const LoginForm = () => {
                 <p className="text-sm text-center text-muted-foreground">
                   Demo: admin@dental.com / admin123
                 </p>
-              </div>
+              </form>
             </TabsContent>
           </Tabs>
         </CardContent>
