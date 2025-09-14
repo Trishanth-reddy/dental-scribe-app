@@ -11,6 +11,9 @@ Frontend (Vercel): https://dental-scribe-app.vercel.app
 
 Backend (AWS/Render): https://backend-dental-uwt7.onrender.com
 
+Demo Video
+https://www.loom.com/share/a6cb1cc995e84f13b785193882aef715?sid=c409b999-da4e-4065-b02e-297b3a1e1d93
+
 Features
 Role-Based Authentication: Secure JWT authentication for Patient and Admin roles.
 
