@@ -1,73 +1,125 @@
-# Welcome to your Lovable project
+OralVis - AI Dental Annotation Platform
+OralVis is a full-stack MERN application designed for dental professionals. It allows patients to upload images of their teeth for review. Administrators can then log in to a secure portal to view submissions, annotate images with professional tools, and generate comprehensive PDF reports. The entire workflow is supported by AWS S3 for robust and scalable file storage.
 
-## Project info
+GitHub Repositories
+Frontend: https://github.com/Trishanth-reddy/dental-scribe-app
 
-**URL**: https://lovable.dev/projects/de1a9668-7f3b-4047-8b2b-11900f5cd0f9
+Backend: https://github.com/Trishanth-reddy/backend-dental
 
-## How can I edit this code?
+Live Demo
+Frontend (Vercel): https://dental-scribe-app.vercel.app
 
-There are several ways of editing your application.
+Backend (AWS/Render): https://backend-dental-uwt7.onrender.com
 
-**Use Lovable**
+Demo Video
+https://www.loom.com/share/a6cb1cc995e84f13b785193882aef715?sid=c409b999-da4e-4065-b02e-297b3a1e1d93
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/de1a9668-7f3b-4047-8b2b-11900f5cd0f9) and start prompting.
+Features
+Role-Based Authentication: Secure JWT authentication for Patient and Admin roles.
 
-Changes made via Lovable will be committed automatically to this repo.
+Patient Dashboard: Patients can upload new images, add notes, and view the status of all their past submissions.
 
-**Use your preferred IDE**
+Admin Dashboard: Admins can view and manage all patient submissions in one place.
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+Advanced Image Annotation: A powerful, in-browser tool for admins to annotate images using shapes (rectangle, circle, arrow) and a fixed color palette (Red for urgent, Yellow for caution, Blue for notes).
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+Dynamic PDF Report Generation: Creates professional PDF reports including patient details, side-by-side original & annotated images, a color legend, and clinical findings.
 
-Follow these steps:
+Cloud Storage: All images (original, annotated) and PDF reports are securely stored and served from AWS S3.
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+Tech Stack
+Frontend: React, Vite, TypeScript, Fabric.js, @react-pdf/renderer, Axios, TanStack Query
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+Backend: Node.js, Express.js, MongoDB (with Mongoose), JWT
 
-# Step 3: Install the necessary dependencies.
-npm i
+Storage: AWS S3 for all file uploads and hosting.
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+Deployment: Vercel (Frontend), AWS App Runner/Render (Backend).
+
+Local Setup and Installation
+Prerequisites
+Node.js (v18 or later)
+
+npm or yarn
+
+MongoDB Atlas account
+
+AWS S3 Bucket & IAM credentials
+
+Git
+
+1. Backend Setup
+Bash
+
+# 1. Clone the repository
+git clone https://github.com/Trishanth-reddy/backend-dental
+cd backend-dental
+
+# 2. Install dependencies
+npm install
+
+# 3. Create a .env file in the root folder and add the following variables:
+PORT=5001
+MONGO_URI=your_mongodb_connection_string
+JWT_SECRET=your_super_secret_jwt_key
+AWS_BUCKET_NAME=your-s3-bucket-name
+AWS_BUCKET_REGION=your-s3-bucket-region
+AWS_ACCESS_KEY=your-aws-access-key
+AWS_SECRET_KEY=your-aws-secret-access-key
+
+# 4. Start the server
+npm start
+2. Frontend Setup
+Bash
+
+# 1. Clone the repository in a separate directory
+git clone https://github.com/Trishanth-reddy/dental-scribe-app
+cd dental-scribe-app
+
+# 2. Install dependencies
+npm install
+
+# 3. Create a .env.local file in the root folder
+# This URL should point to your local backend server
+VITE_API_URL=http://localhost:5001/api
+
+# 4. Start the development server
 npm run dev
-```
+The application should now be running locally at http://localhost:8080 (or another port specified by Vite).
 
-**Edit a file directly in GitHub**
+Test Credentials
+You can use these accounts to test the application's role-based features on the live demo.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+Admin Account:
 
-**Use GitHub Codespaces**
+Email: admin@dental.com
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+Password: admin123
 
-## What technologies are used for this project?
+Patient Account:
 
-This project is built with:
+Email: patient@dental.com
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+Password: patient123
 
-## How can I deploy this project?
+API Documentation & Sample Requests
+Authentication (/api/auth)
+Method	Endpoint	Access	Description
+POST	/register	Public	Creates a new patient account.
+POST	/login	Public	Logs in a user, returns a JWT.
+GET	/me	Private	Gets the current logged-in user.
+Sample Login Request (cURL):
 
-Simply open [Lovable](https://lovable.dev/projects/de1a9668-7f3b-4047-8b2b-11900f5cd0f9) and click on Share -> Publish.
+Bash
 
-## Can I connect a custom domain to my Lovable project?
+curl -X POST https://backend-dental-uwt7.onrender.com/api/auth/login \
+-H "Content-Type: application/json" \
+-d '{"email": "patient@dental.com", "password": "patient123"}'
+Submissions (/api/submissions)
+Method	Endpoint	Access	Description
+POST	/	Patient	Creates a new submission (file upload).
+GET	/patient	Patient	Gets all submissions for the logged-in patient.
+GET	/admin	Admin	Gets all submissions from all patients.
+GET	/:id	Private	Gets a single submission by its ID.
+PUT	/:id/review	Admin	Saves review, uploads files, generates PDF.
 
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
