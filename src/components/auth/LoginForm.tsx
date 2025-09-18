@@ -101,6 +101,9 @@ export const LoginForm = () => {
                   {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                   Sign In as Patient
                 </Button>
+                <p className="text-sm text-center text-muted-foreground">
+                  Demo: patient@dental.com / patient123
+                </p>
               </form>
             </TabsContent>
             
