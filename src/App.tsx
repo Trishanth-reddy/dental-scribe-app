@@ -12,6 +12,10 @@ import { AdminDashboard } from "@/components/admin/AdminDashboard";
 import { AdminSubmissions } from "@/components/admin/AdminSubmissions";
 import { ImageAnnotation } from "@/components/admin/ImageAnnotation";
 import NotFound from "./pages/NotFound";
+import { injectSpeedInsights } from '@vercel/speed-insights';
+
+
+injectSpeedInsights();
 
 const queryClient = new QueryClient();
 
